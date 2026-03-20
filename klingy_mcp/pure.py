@@ -1,3 +1,5 @@
+"""Legacy template fallback kept only to satisfy the starter package layout."""
+
 from __future__ import annotations
 
 
