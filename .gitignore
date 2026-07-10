@@ -101,6 +101,7 @@ ipython_config.py
 #uv.lock
 .uv-cache/
 .uv-tools/
+uv.lock
 .typos-oxendict-base.json
 .typos-oxendict-base.toml
 
