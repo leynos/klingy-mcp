@@ -1,3 +1,5 @@
+"""Provide the pure-Python fallback when the Rust extension is unavailable."""
+
 from __future__ import annotations
 
 

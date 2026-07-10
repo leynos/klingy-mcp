@@ -17,6 +17,12 @@ dev = [
 ]
 
 [tool.ruff]
+extend-exclude = [
+    "scripts/generate_typos_config.py",
+    "scripts/typos_rollout.py",
+    "scripts/typos_rollout_cache.py",
+    "scripts/tests/test_typos_rollout.py",
+]
 line-length = 88
 preview = true
 
@@ -79,6 +85,9 @@ extend-ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
+"klingy_mcp/__init__.py" = [
+    "RUF067", # Package initialization selects the optional Rust or Python backend.
+]
 "**/test_*.py" = ["S101", "PLR0913", "PLR2004"]
 "tests/steps/*.py" = ["S101", "PLR0913", "PLR2004"]
 
@@ -127,4 +136,3 @@ package = true
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
-
