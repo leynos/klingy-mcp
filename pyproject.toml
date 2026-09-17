@@ -9,6 +9,7 @@ dependencies = []
 
 [dependency-groups]
 dev = [
+    "pyyaml",
     "pytest",
     "ruff",
     "pyright",
