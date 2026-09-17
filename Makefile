@@ -70,7 +70,7 @@ lint: ruff ## Run linters
 
 typecheck: build ty ## Run typechecking
 	ty --version
-	ty check
+	ty check --extra-search-path scripts
 
 markdownlint: spelling $(MDLINT) ## Lint Markdown files and enforce spelling
 	$(MDLINT) '**/*.md'
