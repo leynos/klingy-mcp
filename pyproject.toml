@@ -9,9 +9,9 @@ dependencies = []
 
 [dependency-groups]
 dev = [
-    "pyyaml",
+    "pyyaml>=6.0.3,<7.0",
     "pytest",
-    "ruff",
+    "ruff>=0.16.0",
     "pyright",
     "pytest-timeout",
     "pytest-xdist",
