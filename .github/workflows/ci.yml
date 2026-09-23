@@ -43,13 +43,18 @@ jobs:
       - name: Run typechecker
         run: make typecheck
 
+      # Pull requests measure coverage for their own ratchet and nothing else:
+      # no report is published and CodeScene is never contacted from here.
+      # A push to main measures in coverage-main.yml instead, which owns the
+      # baseline this ratchet compares against, so the selection below must
+      # match that workflow's field for field.
       - name: Run tests with coverage
         if: github.event_name == 'pull_request'
-        uses: >-
-          leynos/shared-actions/.github/actions/generate-coverage@152d9c4784d0ae5877938a984fe6d1f04d718fd8
+        uses: leynos/shared-actions/.github/actions/generate-coverage@dbe2e22ceaf498d85512679ccded38be9dbe7777
         with:
           output-path: coverage.xml
           format: cobertura
           python-source: ./klingy_mcp
           pytest-workers: ''
           with-ratchet: 'true'
+          publish-artefact: 'false'
