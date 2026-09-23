@@ -24,6 +24,15 @@ WORKFLOWS: typ.Final[Path] = (
 LANE: typ.Final[str] = "ci.yml"
 PROBE: typ.Final[str] = "probe.yml"
 CREDENTIAL_REFERENCE: typ.Final[str] = "${{ secrets.CS_ACCESS_TOKEN }}"
+#: The publisher's coverage selection, pinned so that both lanes changing
+#: together cannot pass the parity rule unseen.
+EXPECTED_SELECTION: typ.Final[dict[str, object]] = {
+    "output-path": "coverage.xml",
+    "format": "cobertura",
+    "python-source": "./klingy_mcp",
+    "pytest-workers": "",
+    "with-ratchet": "true",
+}
 
 
 @functools.cache
