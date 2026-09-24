@@ -318,12 +318,44 @@ def continues_on_error(mapping: dict[str, object]) -> bool:
 
     `continue-on-error` keeps the step running while its failure turns green,
     which silences a ratchet or an upload as surely as `if: false` does.
+
+    Parameters
+    ----------
+    mapping : dict of str to object
+        A step or job mapping.
+
+    Returns
+    -------
+    bool
+        True unless `continue-on-error` is absent or literally false.
+
     """
     return mapping.get("continue-on-error", False) is not False
 
 
 def holding_job(name: str, document: Document, step: Step) -> dict[str, object]:
-    """Return the job in one workflow whose steps include this step."""
+    """Return the job in one workflow whose steps include this step.
+
+    Parameters
+    ----------
+    name : str
+        The workflow's file name, for messages.
+    document : Document
+        The parsed workflow.
+    step : Step
+        A step mapping taken from that document, matched by identity.
+
+    Returns
+    -------
+    dict of str to object
+        The job mapping holding the step.
+
+    Raises
+    ------
+    StopIteration
+        If no job in the document holds this step object.
+
+    """
     return next(
         job
         for job in jobs(name, document).values()
