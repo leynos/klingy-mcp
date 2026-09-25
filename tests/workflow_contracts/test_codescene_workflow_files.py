@@ -49,6 +49,24 @@ def test_reader_refuses_a_directory_it_cannot_search(tmp_path: Path) -> None:
         locked.chmod(0o700)
 
 
+@pytest.mark.parametrize(
+    ("content", "reason"),
+    [
+        (b"\xff\xfe", "cannot be read as UTF-8"),
+        (b"runs: [\n", "not valid YAML"),
+    ],
+)
+def test_reader_names_an_unreadable_action(
+    tmp_path: Path, content: bytes, reason: str
+) -> None:
+    """A broken action fails at the reader, naming its file."""
+    directory = tmp_path / ".github/actions/bad"
+    directory.mkdir(parents=True)
+    (directory / "action.yml").write_bytes(content)
+    with pytest.raises(WorkflowError, match=reason):
+        read_actions(tmp_path)
+
+
 def test_reader_refuses_an_action_declared_twice(tmp_path: Path) -> None:
     """GitHub reads one metadata file; a reader of either could be misled."""
     directory = tmp_path / ".github/actions/a"

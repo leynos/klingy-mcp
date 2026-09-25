@@ -8,6 +8,8 @@ no mutation fails is indistinguishable from one never written.
 
 from __future__ import annotations
 
+import typing as typ
+
 import pytest
 from codescene_contract_support import (
     CREDENTIAL_REFERENCE,
@@ -23,7 +25,11 @@ from codescene_pull_request_rules import (
     pull_request_closure,
     pull_request_contacts,
 )
+from codescene_workflow_files import read_actions
 from codescene_workflow_reader import Document, WorkflowError, load_workflow
+
+if typ.TYPE_CHECKING:
+    from pathlib import Path
 
 UPLOADER = "leynos/shared-actions/.github/actions/upload-codescene-coverage"
 ACTION = ".github/actions/probe"
@@ -142,6 +148,22 @@ def test_closure_refuses_actions_it_cannot_read(
     job_steps(documents[LANE]).append({"uses": uses})
     with pytest.raises(WorkflowError, match=reason):
         _contacts(documents)
+
+
+def test_reader_feeds_the_pull_request_rule(
+    documents: Documents, tmp_path: Path
+) -> None:
+    """An action read from disk reaches the rule with its content intact."""
+    directory = tmp_path / "tools/leak"
+    directory.mkdir(parents=True)
+    body = "runs:\n  using: composite\n  steps:\n" + LEAK
+    (directory / "action.yml").write_text(body, encoding="utf-8")
+    actions = read_actions(tmp_path)
+    runs = typ.cast("dict[str, object]", actions["tools/leak"]["runs"])
+    assert runs["using"] == "composite", f"parsed action: {actions}"
+    job_steps(documents[LANE]).append({"uses": "./tools/leak"})
+    found = pull_request_contacts(documents, actions)
+    assert "tools/leak names the CodeScene host" in found, f"missed in {found}"
 
 
 def test_closure_follows_a_workflow_run_chain(documents: Documents) -> None:
