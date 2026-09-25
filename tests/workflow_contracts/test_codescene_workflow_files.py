@@ -7,6 +7,7 @@ over an empty subject set, so each refusal here is a clause of the contract.
 
 from __future__ import annotations
 
+import pathlib
 import typing as typ
 
 import pytest
@@ -14,6 +15,7 @@ from codescene_workflow_files import read_actions, read_workflows
 from codescene_workflow_reader import WorkflowError, load_workflow
 
 if typ.TYPE_CHECKING:
+    import collections.abc as cabc
     from pathlib import Path
 
 
@@ -31,22 +33,56 @@ def test_reader_reads_every_local_action(tmp_path: Path) -> None:
 
 def test_reader_skips_hidden_and_vendored_directories(tmp_path: Path) -> None:
     """A virtual environment or dependency tree holds no action to follow."""
-    for directory in (".venv/lib/x", "node_modules/y", "target/z"):
+    skipped = (".venv/lib/x", "__pycache__/w", "node_modules/y", "target/z")
+    for directory in (*skipped, "tools/ok"):
         (tmp_path / directory).mkdir(parents=True)
         (tmp_path / directory / "action.yml").write_text("runs: {}\n")
-    assert not read_actions(tmp_path), "a skipped directory was searched"
+    found = sorted(read_actions(tmp_path))
+    assert found == ["tools/ok"], f"actions read: {found}"
 
 
-def test_reader_refuses_a_directory_it_cannot_search(tmp_path: Path) -> None:
-    """An unreadable directory could hide an action, so it is not skipped."""
-    locked = tmp_path / "tools"
-    locked.mkdir()
-    locked.chmod(0)
-    try:
-        with pytest.raises(WorkflowError, match="cannot search"):
-            read_actions(tmp_path)
-    finally:
-        locked.chmod(0o700)
+def test_reader_refuses_a_directory_it_cannot_search(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An unreadable directory could hide an action, so it is not skipped.
+
+    The walk error is injected rather than made with permission bits, which a
+    privileged process or another platform would ignore.
+    """
+
+    def failing_walk(
+        self: pathlib.Path,
+        *_: object,
+        on_error: cabc.Callable[[OSError], object] | None = None,
+        **__: object,
+    ) -> cabc.Iterator[tuple[pathlib.Path, list[str], list[str]]]:
+        if on_error is not None:
+            on_error(PermissionError(13, "Permission denied", str(self / "tools")))
+        yield from ()
+
+    monkeypatch.setattr(pathlib.Path, "walk", failing_walk)
+    with pytest.raises(
+        WorkflowError, match=r"cannot search .* for local actions: .*tools"
+    ):
+        read_actions(tmp_path)
+
+
+@pytest.mark.parametrize(
+    ("content", "reason"),
+    [
+        (b"\xff\xfe", r"^action\.yml: cannot be read as UTF-8"),
+        (b"runs: [\n", r"^\.github/actions/bad/action\.yml: not valid YAML"),
+    ],
+)
+def test_reader_names_an_unreadable_action(
+    tmp_path: Path, content: bytes, reason: str
+) -> None:
+    """A broken action fails at the reader, naming its file."""
+    directory = tmp_path / ".github/actions/bad"
+    directory.mkdir(parents=True)
+    (directory / "action.yml").write_bytes(content)
+    with pytest.raises(WorkflowError, match=reason):
+        read_actions(tmp_path)
 
 
 def test_reader_refuses_an_action_declared_twice(tmp_path: Path) -> None:
