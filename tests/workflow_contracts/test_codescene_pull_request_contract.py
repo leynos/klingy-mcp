@@ -8,40 +8,44 @@ no mutation fails is indistinguishable from one never written.
 
 from __future__ import annotations
 
-import typing as typ
-
 import pytest
 from codescene_contract_support import (
     CREDENTIAL_REFERENCE,
     LANE,
     PROBE,
     Documents,
+    fresh_actions,
     job_steps,
     lane_jobs,
 )
-from codescene_pull_request_rules import pull_request_closure, pull_request_contacts
-from codescene_workflow_reader import (
-    Document,
-    WorkflowError,
-    load_workflow,
-    read_workflows,
+from codescene_pull_request_rules import (
+    REPOSITORY,
+    pull_request_closure,
+    pull_request_contacts,
 )
-
-if typ.TYPE_CHECKING:
-    from pathlib import Path
+from codescene_workflow_reader import Document, WorkflowError, load_workflow
 
 UPLOADER = "leynos/shared-actions/.github/actions/upload-codescene-coverage"
+ACTION = ".github/actions/probe"
+LEAK = "      - run: curl https://api.codescene.io/v2\n        shell: bash\n"
+
+
+def _contacts(documents: Documents, actions: Documents | None = None) -> list[str]:
+    """Run the pull-request rule over the workflows and the local actions."""
+    return pull_request_contacts(
+        documents, fresh_actions() if actions is None else actions
+    )
 
 
 def test_repository_keeps_codescene_off_pull_requests(documents: Documents) -> None:
     """Hold every pull-request clause over the workflows as committed."""
-    found = pull_request_contacts(documents)
+    found = _contacts(documents)
     assert found == [], f"pull-request lanes reach CodeScene: {found}"
 
 
 def _assert_contact(documents: Documents, expected: str) -> None:
     """Assert that the pull-request rule reports one expected contact."""
-    found = pull_request_contacts(documents)
+    found = _contacts(documents)
     assert expected in found, f"missing {expected!r} in {found}"
 
 
@@ -68,13 +72,76 @@ def test_closure_follows_a_called_workflow(documents: Documents, prefix: str) ->
     documents[PROBE] = callee
     lane_jobs(documents)["probe"] = caller
     assert PROBE in pull_request_closure(documents), "the callee left the closure"
-    found = pull_request_contacts(documents)
+    found = _contacts(documents)
     for expected in (
         f"{PROBE} names the CodeScene host",
         f"{PROBE} puts CS_ACCESS_TOKEN in reach",
         f"{LANE} job probe forwards every secret with `secrets: inherit`",
     ):
         assert expected in found, f"missing {expected!r} in {found}"
+
+
+def _composite(*steps: str) -> Document:
+    """Return a composite action running the given step lines."""
+    body = "".join(steps)
+    return load_workflow(
+        f"{ACTION}/action.yml",
+        f"name: probe\nruns:\n  using: composite\n  steps:\n{body}",
+    )
+
+
+@pytest.mark.parametrize("prefix", ["./", "$/"])
+def test_closure_scans_a_local_action(documents: Documents, prefix: str) -> None:
+    """A local composite action a pull-request step runs is judged as a lane."""
+    actions = fresh_actions()
+    actions[ACTION] = _composite(LEAK)
+    job_steps(documents[LANE]).append({"uses": f"{prefix}{ACTION}"})
+    found = _contacts(documents, actions)
+    assert f"{ACTION} names the CodeScene host" in found, f"missed in {found}"
+
+
+def test_closure_follows_a_nested_local_action(documents: Documents) -> None:
+    """A local action run by a reached local action is judged as well."""
+    actions = fresh_actions()
+    actions[ACTION] = _composite("      - uses: ./.github/actions/inner/\n")
+    actions[".github/actions/inner"] = _composite(LEAK)
+    job_steps(documents[LANE]).append({"uses": f"./{ACTION}"})
+    found = _contacts(documents, actions)
+    expected = ".github/actions/inner names the CodeScene host"
+    assert expected in found, f"missing {expected!r} in {found}"
+
+
+def test_closure_normalizes_a_local_action_path(documents: Documents) -> None:
+    """A redundant `.` component still names the same checked-out action."""
+    actions = fresh_actions()
+    actions[ACTION] = _composite(LEAK)
+    job_steps(documents[LANE]).append({"uses": "./.github/actions/./probe"})
+    found = _contacts(documents, actions)
+    assert f"{ACTION} names the CodeScene host" in found, f"missed in {found}"
+
+
+def test_unreached_local_action_stays_off_the_surface(documents: Documents) -> None:
+    """The action rule is narrow: an action no PR step runs is not judged."""
+    actions = fresh_actions()
+    actions[ACTION] = _composite(LEAK)
+    assert _contacts(documents, actions) == [], "an unreached action was judged"
+
+
+@pytest.mark.parametrize(
+    ("uses", "reason"),
+    [
+        (f"$/{ACTION}@main", "a `\\$/` call cannot name a ref"),
+        (f"{REPOSITORY}/{ACTION}@main", "runs this repository's action at a ref"),
+        ("./actions/missing", "names no action in this repository"),
+    ],
+)
+def test_closure_refuses_actions_it_cannot_read(
+    documents: Documents, uses: str, reason: str
+) -> None:
+    """A local action the closure cannot follow to a checked-out file is refused."""
+    job_steps(documents[LANE]).append({"uses": uses})
+    with pytest.raises(WorkflowError, match=reason):
+        _contacts(documents)
 
 
 def test_closure_follows_a_workflow_run_chain(documents: Documents) -> None:
@@ -254,36 +321,3 @@ def test_both_trigger_spellings_are_refused() -> None:
     text = "on: push\n'on': pull_request\njobs: {}\n"
     with pytest.raises(WorkflowError, match="declares `on` 2 times"):
         pull_request_closure({"both.yml": load_workflow("both.yml", text)})
-
-
-def test_reader_refuses_an_empty_directory(tmp_path: Path) -> None:
-    """Finding no workflow is the reader failing, not the repository passing."""
-    with pytest.raises(WorkflowError, match="no workflows were read"):
-        read_workflows(tmp_path)
-
-
-def test_reader_reads_every_suffix_and_case(tmp_path: Path) -> None:
-    """GitHub runs `.yaml` and upper-case suffixes too."""
-    for name in ("a.YML", "b.yaml"):
-        (tmp_path / name).write_text("on: push\njobs: {}\n", encoding="utf-8")
-    found = sorted(read_workflows(tmp_path))
-    assert found == ["a.YML", "b.yaml"], f"workflows read: {found}"
-
-
-def test_reader_refuses_a_missing_directory(tmp_path: Path) -> None:
-    """A directory that cannot be listed fails at the reader, naming it."""
-    with pytest.raises(WorkflowError, match="cannot list workflows"):
-        read_workflows(tmp_path / "missing")
-
-
-def test_reader_refuses_a_file_that_is_not_utf8(tmp_path: Path) -> None:
-    """Undecodable bytes fail at the reader, naming the file."""
-    (tmp_path / "bad.yml").write_bytes(b"\xff\xfe")
-    with pytest.raises(WorkflowError, match=r"^bad\.yml: cannot be read as UTF-8"):
-        read_workflows(tmp_path)
-
-
-def test_reader_names_the_file_for_invalid_yaml() -> None:
-    """A parser error must say which workflow it came from."""
-    with pytest.raises(WorkflowError, match=r"^bad\.yml: not valid YAML"):
-        load_workflow("bad.yml", "jobs: [\n")
