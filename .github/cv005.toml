@@ -1,0 +1,10 @@
+repository = "leynos/klingy-mcp"
+
+# What the ratchet baseline measures: the publisher's generator must carry
+# exactly these inputs, and every lane must measure the same selection.
+[selection]
+output-path = "coverage.xml"
+format = "cobertura"
+python-source = "./klingy_mcp"
+pytest-workers = ""
+with-ratchet = "true"
