@@ -37,7 +37,7 @@ jobs:
       - name: Install mdtablefix
         # `make check-fmt` runs `mdtablefix --check --git`; this pins the
         # version the estate formats with.
-        uses: leynos/shared-actions/.github/actions/install-mdtablefix@3086643fbcea5bc01ed65cf5aec5a3accf081ab4
+        uses: leynos/shared-actions/.github/actions/install-mdtablefix@0eabb6bc07148981de5da395e30cd78d83f5c7c2
         with:
           version: "0.6.1"
 
@@ -70,7 +70,7 @@ jobs:
       # match that workflow's field for field.
       - name: Run tests with coverage
         if: github.event_name == 'pull_request'
-        uses: leynos/shared-actions/.github/actions/generate-coverage@3086643fbcea5bc01ed65cf5aec5a3accf081ab4
+        uses: leynos/shared-actions/.github/actions/generate-coverage@0eabb6bc07148981de5da395e30cd78d83f5c7c2
         with:
           output-path: coverage.xml
           format: cobertura
