@@ -18,12 +18,6 @@ dev = [
 ]
 
 [tool.ruff]
-extend-exclude = [
-    "scripts/generate_typos_config.py",
-    "scripts/typos_rollout.py",
-    "scripts/typos_rollout_cache.py",
-    "scripts/tests/test_typos_rollout.py",
-]
 line-length = 88
 preview = true
 
