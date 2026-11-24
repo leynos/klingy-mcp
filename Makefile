@@ -21,11 +21,13 @@ CV005_CONTRACTS = $(UV_ENV) $(UV) tool run --python 3.13 \
 	--from 'git+https://github.com/leynos/shared-actions@$(CV005_CONTRACTS_REF)\#subdirectory=packages/cv005-contracts' \
 	cv005-contracts
 
-RUFF_VERSION ?= 0.15.12
-TYPOS_VERSION ?= 1.48.0
+TYPOS_CONFIG_BUILDER_VERSION ?= v0.1.4
+TYPOS_CONFIG_BUILDER = $(UV_ENV) $(UV) tool run --python 3.14 --from \
+	"git+https://github.com/leynos/typos-config-builder.git@$(TYPOS_CONFIG_BUILDER_VERSION)" \
+	typos-config-builder
 
 .PHONY: help all clean build build-release lint fmt check-fmt \
-        markdownlint nixie spelling spelling-helper-test test typecheck \
+        markdownlint nixie spelling test typecheck \
         $(TOOLS) $(VENV_TOOLS) test-workflow-contracts
 
 .DEFAULT_GOAL := all
@@ -91,11 +93,11 @@ lint: ruff ## Run linters
 
 typecheck: build ty ## Run typechecking
 	ty --version
-	ty check --extra-search-path scripts
+	ty check
 
 # Interrogate scans each target recursively, subject to its default exclusions.
 INTERROGATE_VERSION ?= 1.7.0
-INTERROGATE_TARGETS ?= klingy_mcp scripts
+INTERROGATE_TARGETS ?= klingy_mcp
 # Level 2 prints a MISSED row per undocumented definition, which the
 # `interrogate` recipe below looks for: the rounded percentage alone can pass a
 # lone gap.
@@ -124,27 +126,8 @@ lint: interrogate
 markdownlint: spelling $(MDLINT) ## Lint Markdown files and enforce spelling
 	$(MDLINT) '**/*.md'
 
-spelling: spelling-helper-test ## Enforce en-GB-oxendict spelling in Markdown prose
-	@$(UV_ENV) uv run scripts/generate_typos_config.py
-	@git ls-files -z '*.md' | \
-		xargs -0 -r env $(UV_ENV) uv tool run typos@$(TYPOS_VERSION) \
-		--config typos.toml --force-exclude
-
-spelling-helper-test: ## Validate the shared spelling-policy integration
-	@$(UV_ENV) uv tool run ruff@$(RUFF_VERSION) format --isolated \
-		--target-version py313 --check scripts/generate_typos_config.py \
-		scripts/typos_rollout.py scripts/typos_rollout_cache.py \
-		scripts/tests/test_typos_rollout.py
-	@$(UV_ENV) uv tool run ruff@$(RUFF_VERSION) check --isolated \
-		--target-version py313 scripts/generate_typos_config.py \
-		scripts/typos_rollout.py scripts/typos_rollout_cache.py \
-		scripts/tests/test_typos_rollout.py
-	@PYTHONPATH=scripts $(UV_ENV) uv run --no-project --python 3.13 \
-		--with pytest==9.0.2 --with pytest-cov==7.0.0 \
-		python -m pytest scripts/tests/test_typos_rollout.py \
-		-c /dev/null --rootdir=. -p no:cacheprovider \
-		--cov=generate_typos_config --cov=typos_rollout \
-		--cov=typos_rollout_cache --cov-fail-under=90
+spelling: ## Enforce en-GB-oxendict spelling in prose
+	$(TYPOS_CONFIG_BUILDER) gate --repository .
 
 nixie: ## Validate Mermaid diagrams
 	$(call ensure_tool,nixie)
